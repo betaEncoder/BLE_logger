@@ -38,7 +38,7 @@ namespace BLE_logger
         public string Format { get; } = "x";
 
         private DeviceWatcher DeviceWatcher { get; set; }
-        private BluetoothLEDevice Device { get; set; }
+        //private BluetoothLEDevice Device { get; set; }
         private DeviceInformation DevInfo;
         private GattDeviceServicesResult services;
         private GattCharacteristicsResult characteristics;
@@ -62,6 +62,7 @@ namespace BLE_logger
                 DeviceWatcher = DeviceInformation.CreateWatcher(selector);
             }
             DeviceWatcher.Added += Watcher_DeviceAdded;
+            DeviceWatcher.Stopped += connect;
             DeviceWatcher.Start();
 
             // Ctrl-C割り込みのイベントを受け取る
@@ -90,23 +91,31 @@ namespace BLE_logger
                 // デバイス情報更新時のハンドラを解除しウォッチャーをストップ
                 DeviceWatcher.Added -= Watcher_DeviceAdded;
                 DeviceWatcher.Stop();
-                Thread.Sleep(200);  //待たないと例外を吐く．知らんけど．
+                
+            }
+        }
 
-                // 目的のcharacteristicを探して接続する
-                Device = await BluetoothLEDevice.FromIdAsync(DevInfo.Id);
-                services = await Device.GetGattServicesForUuidAsync(Service);
-                characteristics = await services.Services[0].GetCharacteristicsForUuidAsync(Characteristic);
-                CharacteristictoLog = characteristics.Characteristics[0];
-                if (Interval == 0)
-                {
-                    // enable notify
-                    var status = await CharacteristictoLog.WriteClientCharacteristicConfigurationDescriptorAsync(GattClientCharacteristicConfigurationDescriptorValue.Notify);
-                    CharacteristictoLog.ValueChanged += notify;
-                }
-                else
-                {
-                    // set timer to read
-                }
+        private async void connect(DeviceWatcher sender, object args)
+        {
+            BluetoothLEDevice Device = await BluetoothLEDevice.FromIdAsync(DevInfo.Id);
+            services = await Device.GetGattServicesForUuidAsync(Service);
+            characteristics = await services.Services[0].GetCharacteristicsForUuidAsync(Characteristic);
+            if(characteristics.Status!= GattCommunicationStatus.Success)
+            {
+                // access failed
+                Console.WriteLine("Characteristic access failed.");
+                Environment.Exit(-1);
+            }
+            CharacteristictoLog = characteristics.Characteristics[0];
+            if (Interval == 0)
+            {
+                // enable notify
+                var status = await CharacteristictoLog.WriteClientCharacteristicConfigurationDescriptorAsync(GattClientCharacteristicConfigurationDescriptorValue.Notify);
+                CharacteristictoLog.ValueChanged += notify;
+            }
+            else
+            {
+                // set timer to read
             }
         }
 
